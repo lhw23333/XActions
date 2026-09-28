@@ -7,6 +7,8 @@
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](getting-started.md) | Install, authenticate, run your first command |
+| [Operations Lineage](xactions-operations-lineage.md) | Visual hierarchy of the CLI and MCP operations |
+| [AI Usage Manual](ai-usage-manual.md) | Runbook for AI agents using XActions safely |
 | [Ask XActions](ask.md) | Ask anything at xactions.app/ask: sourced answers from the docs and the repo over free LLM lanes |
 | [CLI Reference](cli-reference.md) | All 56 `xactions` commands and the subcommands under them |
 | [API Reference](api-reference.md) | REST API across 40 route modules |

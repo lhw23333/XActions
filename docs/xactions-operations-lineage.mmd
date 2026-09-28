@@ -1,0 +1,74 @@
+flowchart TD
+    ROOT["XActions v3.5.0\n单账号 X 运营能力"]
+
+    ROOT --> ACCESS["接入层"]
+    ROOT --> READ["读取与发现"]
+    ROOT --> ANALYTICS["分析与决策"]
+    ROOT --> CONTENT["内容生产"]
+    ROOT --> WRITE["账号写操作"]
+    ROOT --> AUTOMATION["自动化运营"]
+    ROOT --> MONITOR["监控与触发"]
+    ROOT --> DATA["数据与协作"]
+
+    ACCESS --> CLI["CLI\nxactions <command>"]
+    ACCESS --> MCP["MCP\n154 tools"]
+    ACCESS --> API["REST API\nlocalhost:3001/api"]
+    ACCESS --> DASHBOARD["Dashboard\nlocalhost:3001"]
+    ACCESS --> BROWSER["Browser Scripts\nDevTools"]
+
+    CLI --> AUTH["登录态\nconnect / login / doctor"]
+    MCP --> APPROVAL["审批门\nlist / approve / discard draft"]
+    API --> DB["PostgreSQL\nPrisma"]
+    DASHBOARD --> DB
+
+    READ --> ACCOUNT["账号读取\nprofile / tweets / thread / media"]
+    READ --> SOCIAL["社交图谱\nfollowers / following / non-followers"]
+    READ --> SEARCH["搜索发现\nsearch / hashtag / scrape"]
+    READ --> INBOX["时间线与收件箱\nhome / notifications / bookmarks / DMs"]
+    READ --> SPACE_READ["Spaces 与媒体\nspaces / transcript / download"]
+
+    ANALYTICS --> ACCOUNT_ANALYTICS["账号分析\nreport / history / growth"]
+    ANALYTICS --> ENGAGEMENT_ANALYTICS["互动分析\npost analytics / engagement / sentiment"]
+    ANALYTICS --> AUDIENCE_ANALYTICS["受众分析\noverlap / bots / influencers / targeting"]
+    ANALYTICS --> CONTENT_ANALYTICS["内容分析\nvoice / best time / evergreen / performance"]
+
+    CONTENT --> AI_WRITER["AI 写作\ngenerate / rewrite / optimize"]
+    CONTENT --> IDEATION["内容策划\nhashtags / predictions / variations"]
+    CONTENT --> PERSONA["Persona\ncreate / edit / run / status"]
+    CONTENT --> CALENDAR["日历与草稿\nschedule / RSS drafts / workflows"]
+
+    WRITE --> POST["发布\npost / thread / poll / article / quote"]
+    WRITE --> ENGAGE["互动\nlike / retweet / reply / bookmark"]
+    WRITE --> RELATIONSHIP["关系管理\nfollow / unfollow / mute / protect"]
+    WRITE --> PROFILE["资料设置\nupdate profile / delete post"]
+    WRITE --> DM["私信\nsend / list / export"]
+
+    AUTOMATION --> TARGETED["定向运营\nengage / follow engagers"]
+    AUTOMATION --> BULK["批量操作\nbulk execute / auto-like / auto-comment"]
+    AUTOMATION --> CLEANUP["关系清理\nsmart unfollow / unfollow all"]
+    AUTOMATION --> PIPELINES["工作流\ncreate / run / schedule"]
+
+    MONITOR --> ACCOUNT_MONITOR["账号监控\nmonitor account / follower alerts"]
+    MONITOR --> KEYWORD_MONITOR["品牌与关键词\nbrand monitor / keyword monitor"]
+    MONITOR --> STREAMS["实时流\nstart / pause / resume / history"]
+    MONITOR --> NOTIFY["通知\nemail / Slack / Discord / Telegram"]
+
+    DATA --> EXPORT["导出与迁移\nexport / archive / convert / migrate"]
+    DATA --> CRM["粉丝 CRM\nsync / tag / search / segment"]
+    DATA --> GRAPH["关系图\nbuild / analyze / recommendations"]
+    DATA --> TEAM["团队与数据集\nteam / dataset / import"]
+
+    APPROVAL -.-> WRITE
+    APPROVAL -.-> AUTOMATION
+    AUTH -.-> READ
+    AUTH -.-> WRITE
+    AUTH -.-> AUTOMATION
+
+    classDef root fill:#111827,color:#fff,stroke:#111827,stroke-width:2px;
+    classDef layer fill:#dbeafe,color:#172554,stroke:#2563eb;
+    classDef access fill:#dcfce7,color:#14532d,stroke:#16a34a;
+    classDef risk fill:#fee2e2,color:#7f1d1d,stroke:#dc2626;
+    class ROOT root;
+    class ACCESS,READ,ANALYTICS,CONTENT,WRITE,AUTOMATION,MONITOR,DATA layer;
+    class CLI,MCP,API,DASHBOARD,BROWSER,AUTH,DB access;
+    class APPROVAL,WRITE,AUTOMATION,DM,BULK,CLEANUP risk;

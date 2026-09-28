@@ -38,8 +38,8 @@
   },
   "scripts": {
     "vercel-build": "prisma generate",
-    "dev": "NODE_ENV=development nodemon api/server.js",
-    "start": "NODE_ENV=production node api/server.js",
+    "dev": "nodemon scripts/dev-server.mjs",
+    "start": "node scripts/start-server.mjs",
     "cli": "node src/cli/index.js",
     "mcp": "node src/mcp/server.js",
     "worker": "node api/services/jobQueue.js",
