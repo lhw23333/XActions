@@ -9,7 +9,7 @@
  * @license Apache-2.0
  */
 
-import { GRAPHQL_ENDPOINTS, DEFAULT_FEATURES, buildGraphQLUrl } from './graphqlQueries.js';
+import { GRAPHQL_ENDPOINTS, buildGraphQLRequest, buildGraphQLUrl } from './graphqlQueries.js';
 import { Profile } from '../models/Profile.js';
 import { NotFoundError, ScraperError } from '../errors.js';
 import { parseTimelineEntries, parseUserEntry } from './parsers.js';
@@ -120,8 +120,10 @@ export async function* getFollowers(http, userId, count = 100) {
     };
     if (cursor) variables.cursor = cursor;
 
-    const url = buildGraphQLUrl(endpoint, variables);
-    const data = await http.get(url);
+    const request = buildGraphQLRequest(endpoint, variables);
+    const data = request.method === 'POST'
+      ? await http.post(request.url, request.body)
+      : await http.get(request.url);
 
     const { entries, cursor: nextCursor } = parseTimelineEntries(
       data,

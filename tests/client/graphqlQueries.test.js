@@ -12,7 +12,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { GRAPHQL_ENDPOINTS, BEARER_TOKEN, buildGraphQLUrl } from '../../src/client/api/graphqlQueries.js';
+import {
+  GRAPHQL_ENDPOINTS,
+  BEARER_TOKEN,
+  buildGraphQLUrl,
+  buildGraphQLRequest,
+} from '../../src/client/api/graphqlQueries.js';
 import { GRAPHQL, BEARER_TOKEN as SHARED_BEARER_TOKEN } from '../../src/scrapers/twitter/http/endpoints.js';
 
 describe('GraphQL query ID registry', () => {
@@ -56,5 +61,33 @@ describe('GraphQL query ID registry', () => {
 
   it('builds REST URLs from their url() factory', () => {
     expect(buildGraphQLUrl(GRAPHQL_ENDPOINTS.Trends)).toBe('https://x.com/i/api/2/guide.json');
+  });
+
+  it('builds SearchTimeline as a POST request', () => {
+    const request = buildGraphQLRequest(GRAPHQL_ENDPOINTS.SearchTimeline, {
+      rawQuery: 'web3',
+      product: 'Latest',
+    });
+
+    expect(request.method).toBe('POST');
+    expect(request.url).toContain('/SearchTimeline');
+    expect(request.body).toMatchObject({
+      queryId: GRAPHQL.SearchTimeline.queryId,
+      variables: { rawQuery: 'web3', product: 'Latest' },
+    });
+  });
+
+  it('builds Followers as a POST request', () => {
+    const request = buildGraphQLRequest(GRAPHQL_ENDPOINTS.Followers, {
+      userId: '11348282',
+      count: 20,
+    });
+
+    expect(request.method).toBe('POST');
+    expect(request.url).toContain('/Followers');
+    expect(request.body).toMatchObject({
+      queryId: GRAPHQL.Followers.queryId,
+      variables: { userId: '11348282', count: 20 },
+    });
   });
 });

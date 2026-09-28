@@ -33,6 +33,7 @@ import {
   isStaleQueryIdError,
 } from './queryIds.js';
 import { getTransactionId, isTransactionIdEnabled } from './transactionId.js';
+import { GuestTokenManager } from './guest.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,6 +93,8 @@ export class TwitterHttpClient {
    *   Defaults to on outside vitest, and can be switched off globally with
    *   `XACTIONS_TRANSACTION_ID=0` for debugging. Signing never blocks a
    *   request: if the keys cannot be obtained the request goes out unsigned.
+   * @param {boolean} [options.guestToken] - Activate and attach a guest token
+   *   for requests without an auth_token. Defaults to on outside vitest.
    */
   constructor(options = {}) {
     this._cookies = {};
@@ -103,6 +106,8 @@ export class TwitterHttpClient {
     this._userAgents = USER_AGENTS;
     this._autoRefreshQueryIds = options.autoRefreshQueryIds ?? !process.env.VITEST;
     this._transactionId = options.transactionId;
+    this._guestTokenEnabled = options.guestToken ?? !process.env.VITEST;
+    this._guestToken = options.guestTokenManager || new GuestTokenManager({ fetch: this._fetch });
 
     if (options.userAgent && options.userAgent !== 'rotate') {
       this._userAgents = [options.userAgent];
@@ -144,6 +149,11 @@ export class TwitterHttpClient {
       const value = pair.slice(eqIdx + 1).trim();
       this._cookies[name] = value;
     }
+  }
+
+  /** Clear all session cookies from this client. */
+  clearCookies() {
+    this._cookies = {};
   }
 
   getCsrfToken() {
@@ -257,7 +267,11 @@ export class TwitterHttpClient {
   async request(url, options = {}) {
     const method = options.method || 'GET';
     const authenticated = options.authenticated !== false;
-    const headers = { ...this._buildHeaders(authenticated), ...options.headers };
+    const hasSession = authenticated && this.isAuthenticated();
+    const headers = { ...this._buildHeaders(hasSession), ...options.headers };
+    if (!hasSession && this._guestTokenEnabled) {
+      Object.assign(headers, await this._guestToken.getHeaders());
+    }
     const body =
       options.body && typeof options.body !== 'string'
         ? JSON.stringify(options.body)

@@ -18,7 +18,7 @@ import * as listsApi from './api/lists.js';
 import * as dmsApi from './api/dms.js';
 import { ScraperError, AuthenticationError } from './errors.js';
 import { validateUsername, validateTweetId, validateTweetText, validateCount } from './validation.js';
-import { TokenManager } from './auth/TokenManager.js';
+import { TwitterHttpFacade } from './TwitterHttpFacade.js';
 
 /**
  * Search mode enum for Twitter search.
@@ -30,135 +30,6 @@ export const SearchMode = Object.freeze({
   Photos: 'Photos',
   Videos: 'Videos',
 });
-
-/**
- * Turn an unhelpful HTTP failure into an actionable one.
- *
- * X answers guest-token requests to login-only endpoints (search, bookmarks,
- * DMs, home timeline) with a bare 404 and an empty body, which is
- * indistinguishable from a missing resource unless you already know the
- * endpoint needs a session. Raising `HTTP 404: Not Found` sent people hunting
- * for a bug in XActions when the real answer was "log in first".
- *
- * Errors are also constructed with the object-form options ScraperError
- * actually declares. The previous positional calls silently dropped
- * `endpoint`, `httpStatus`, and `rateLimitReset` on every thrown error.
- *
- * @param {Response} res - The failed fetch response
- * @param {string} url - Requested URL
- * @param {boolean} authenticated - Whether the request carried a session
- * @returns {ScraperError} Error ready to throw
- * @private
- */
-function describeHttpFailure(res, url, authenticated) {
-  const endpoint = (() => {
-    try {
-      return new URL(url).pathname;
-    } catch {
-      return url;
-    }
-  })();
-
-  if (res.status === 429) {
-    const reset = res.headers?.get?.('x-rate-limit-reset');
-    return new ScraperError(
-      'Rate limited (429). X throttles guest tokens aggressively. Wait for the reset, ' +
-        'authenticate to raise the ceiling, or slow the request rate.',
-      'RATE_LIMITED',
-      {
-        endpoint,
-        httpStatus: res.status,
-        rateLimitReset: reset ? new Date(Number(reset) * 1000) : null,
-      },
-    );
-  }
-
-  if (!authenticated && (res.status === 401 || res.status === 403 || res.status === 404)) {
-    return new AuthenticationError(
-      `HTTP ${res.status} on ${endpoint} while unauthenticated. X restricts this endpoint ` +
-        'to logged-in sessions. Authenticate first with scraper.login(...), ' +
-        'scraper.setCookies(...), or scraper.loadCookies(...) using your auth_token cookie ' +
-        '(DevTools > Application > Cookies > x.com > auth_token), then retry.',
-      'AUTH_REQUIRED',
-      { endpoint, httpStatus: res.status },
-    );
-  }
-
-  return new ScraperError(`HTTP ${res.status}: ${res.statusText}`, 'HTTP_ERROR', {
-    endpoint,
-    httpStatus: res.status,
-  });
-}
-
-/**
- * Lightweight HTTP wrapper that delegates to fetch.
- * In Track 03 this will be replaced by the full HttpClient.
- * @private
- */
-class SimpleHttp {
-  constructor(tokenManager, options = {}) {
-    this._tokenManager = tokenManager;
-    this._fetchFn = options.fetch || globalThis.fetch;
-    this._proxy = options.proxy || null;
-    this._transform = options.transform || null;
-    this._cookies = null;
-    this._authenticated = false;
-  }
-
-  /**
-   * Make a GET request.
-   * @param {string} url
-   * @returns {Promise<any>}
-   */
-  async get(url) {
-    await this._tokenManager.getGuestToken();
-    const headers = this._tokenManager.getHeaders(this._authenticated);
-    if (this._cookies) {
-      headers['Cookie'] = this._cookies;
-    }
-
-    let req = { method: 'GET', headers };
-    if (this._transform) req = this._transform(req) || req;
-
-    const res = await this._fetchFn(url, req);
-    if (!res.ok) {
-      throw describeHttpFailure(res, url, this._authenticated);
-    }
-    return res.json();
-  }
-
-  /**
-   * Make a POST request.
-   * @param {string} url
-   * @param {any} body
-   * @param {Object} [extraHeaders]
-   * @returns {Promise<any>}
-   */
-  async post(url, body, extraHeaders = {}) {
-    await this._tokenManager.getGuestToken();
-    const headers = {
-      ...this._tokenManager.getHeaders(this._authenticated),
-      ...extraHeaders,
-    };
-    if (this._cookies) {
-      headers['Cookie'] = this._cookies;
-    }
-    if (typeof body === 'object' && !extraHeaders['Content-Type']) {
-      headers['Content-Type'] = 'application/json';
-    }
-
-    const payload = typeof body === 'string' ? body : JSON.stringify(body);
-
-    let req = { method: 'POST', headers, body: payload };
-    if (this._transform) req = this._transform(req) || req;
-
-    const res = await this._fetchFn(url, req);
-    if (!res.ok) {
-      throw describeHttpFailure(res, url, this._authenticated);
-    }
-    return res.json();
-  }
-}
 
 /**
  * Scraper — the main entry point for programmatic Twitter/X access.
@@ -190,31 +61,14 @@ export class Scraper {
    */
   constructor(options = {}) {
     /** @private */
-    this._auth = new TokenManager(options.fetch || globalThis.fetch);
+    this._http = new TwitterHttpFacade(options);
     /** @private */
-    this._http = new SimpleHttp(this._auth, options);
-    /** @private */
-    this._isLoggedIn = false;
+    this._isLoggedIn = this._http.isAuthenticated();
     /** @private */
     this._userIdCache = new Map();
     /** @private */
     this._options = options;
 
-    if (options.cookies) {
-      this._http._cookies =
-        typeof options.cookies === 'string'
-          ? options.cookies
-          : Array.isArray(options.cookies)
-            ? options.cookies.map((c) => `${c.name}=${c.value}`).join('; ')
-            : '';
-      // Extract ct0 (CSRF token) from cookies
-      const ct0Match = this._http._cookies.match(/ct0=([^;]+)/);
-      if (ct0Match) {
-        this._auth.setCsrfToken(ct0Match[1]);
-        this._http._authenticated = true;
-        this._isLoggedIn = true;
-      }
-    }
   }
 
   // =========================================================================
@@ -246,10 +100,7 @@ export class Scraper {
    */
   async logout() {
     this._isLoggedIn = false;
-    this._http._cookies = null;
-    this._http._authenticated = false;
-    this._auth.invalidateGuestToken();
-    this._auth.setCsrfToken(null);
+    this._http.clearCookies();
     this._userIdCache.clear();
   }
 
@@ -268,11 +119,7 @@ export class Scraper {
    * @returns {Promise<Array<{name: string, value: string}>>}
    */
   async getCookies() {
-    if (!this._http._cookies) return [];
-    return this._http._cookies.split('; ').map((pair) => {
-      const [name, ...rest] = pair.split('=');
-      return { name: name.trim(), value: rest.join('=') };
-    });
+    return this._http.getCookies();
   }
 
   /**
@@ -282,19 +129,8 @@ export class Scraper {
    * @returns {Promise<void>}
    */
   async setCookies(cookies) {
-    if (typeof cookies === 'string') {
-      this._http._cookies = cookies;
-    } else if (Array.isArray(cookies)) {
-      this._http._cookies = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-    }
-
-    // Extract ct0 CSRF token
-    const ct0Match = (this._http._cookies || '').match(/ct0=([^;]+)/);
-    if (ct0Match) {
-      this._auth.setCsrfToken(ct0Match[1]);
-      this._http._authenticated = true;
-      this._isLoggedIn = true;
-    }
+    this._http.setCookies(cookies);
+    this._isLoggedIn = this._http.isAuthenticated();
   }
 
   /**

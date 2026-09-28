@@ -150,6 +150,22 @@ function assertNotEmpty(results, what, hint) {
   );
 }
 
+/**
+ * Resolve the username accepted by CLI commands to the numeric ID required by
+ * the followers/following GraphQL timelines.
+ *
+ * @param {import('../client/index.js').Scraper} scraper
+ * @param {string} username
+ * @returns {Promise<string>}
+ */
+async function resolveProfileId(scraper, username) {
+  const profile = await scraper.getProfile(username);
+  if (!profile?.id) {
+    throw new Error(`X returned no profile data for @${username}. Check the handle, or ${AUTH_HINT}`);
+  }
+  return profile.id;
+}
+
 /** Suggested next step when an unauthenticated read comes back empty. */
 const AUTH_HINT =
   'Run `xactions login` with your auth_token cookie (DevTools > Application > Cookies > x.com), ' +
@@ -482,9 +498,10 @@ program
 
     try {
       const scraper = await createHttpScraper();
+      const userId = await resolveProfileId(scraper, username);
 
       const followers = [];
-      for await (const follower of scraper.getFollowers(username, limit)) {
+      for await (const follower of scraper.getFollowers(userId, limit)) {
         followers.push(follower);
         spinner.text = `Scraping followers for @${username} (${followers.length}/${limit})`;
       }
@@ -515,9 +532,10 @@ program
 
     try {
       const scraper = await createHttpScraper();
+      const userId = await resolveProfileId(scraper, username);
 
       const following = [];
-      for await (const account of scraper.getFollowing(username, limit)) {
+      for await (const account of scraper.getFollowing(userId, limit)) {
         following.push(account);
         spinner.text = `Scraping following for @${username} (${following.length}/${limit})`;
       }
@@ -546,10 +564,11 @@ program
 
     try {
       const scraper = await createHttpScraper();
+      const userId = await resolveProfileId(scraper, username);
 
       spinner.text = 'Reading following list...';
       const following = [];
-      for await (const account of scraper.getFollowing(username, limit)) {
+      for await (const account of scraper.getFollowing(userId, limit)) {
         following.push(account);
         spinner.text = `Reading following list (${following.length})`;
       }
@@ -557,7 +576,7 @@ program
 
       spinner.text = 'Reading follower list...';
       const followerHandles = new Set();
-      for await (const follower of scraper.getFollowers(username, limit)) {
+      for await (const follower of scraper.getFollowers(userId, limit)) {
         followerHandles.add(follower.username.toLowerCase());
         spinner.text = `Reading follower list (${followerHandles.size})`;
       }
@@ -653,14 +672,14 @@ program
   .option('--json', 'Force JSON on stdout, ignoring --output and --google-sheets')
   .action(async (query, options) => {
     const limit = parseInt(options.limit);
-    const mode = resolveOutputMode(program, options);
-    const spinner = createSpinner(`Searching for "${query}"`, mode);
+    const outputMode = resolveOutputMode(program, options);
+    const spinner = createSpinner(`Searching for "${query}"`, outputMode);
 
     try {
       const scraper = await createHttpScraper();
       const { SearchMode } = await import('../client/index.js');
 
-      const mode =
+      const searchMode =
         {
           latest: SearchMode.Latest,
           top: SearchMode.Top,
@@ -669,7 +688,7 @@ program
         }[String(options.filter).toLowerCase()] || SearchMode.Latest;
 
       const tweets = [];
-      for await (const tweet of scraper.searchTweets(query, limit, mode)) {
+      for await (const tweet of scraper.searchTweets(query, limit, searchMode)) {
         tweets.push(tweet);
         spinner.text = `Searching for "${query}" (${tweets.length}/${limit})`;
       }
@@ -677,8 +696,8 @@ program
       assertNotEmpty(tweets, `results for "${query}"`, AUTH_HINT);
       spinner.succeed(`Found ${tweets.length} tweets`);
 
-      if (mode.compact) {
-        printCompact(tweets, { kind: 'tweet', fields: mode.fields });
+      if (outputMode.compact) {
+        printCompact(tweets, { kind: 'tweet', fields: outputMode.fields });
       } else if (options.json) {
         console.log(JSON.stringify(tweets, null, 2));
       } else if (options.output) {

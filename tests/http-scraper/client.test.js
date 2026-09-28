@@ -554,6 +554,32 @@ describe('User agent rotation', () => {
 // ---------------------------------------------------------------------------
 
 describe('Unauthenticated requests', () => {
+  it('activates and attaches a guest token when enabled', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ guest_token: 'guest-123' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ ok: true }),
+      });
+    const client = new TwitterHttpClient({
+      fetch,
+      guestToken: true,
+      maxRetries: 0,
+    });
+
+    await client.request('https://x.com/test');
+
+    expect(fetch.mock.calls[0][0]).toContain('/1.1/guest/activate.json');
+    expect(fetch.mock.calls[1][1].headers['x-guest-token']).toBe('guest-123');
+  });
+
   it('omits csrf token, auth type, and cookie when not authenticated', async () => {
     const fetch = mockFetch(200, { ok: true });
     const client = new TwitterHttpClient({

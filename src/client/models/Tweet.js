@@ -189,12 +189,18 @@ export class Tweet {
     tweet.text = tweet.fullText;
     tweet.conversationId = legacy.conversation_id_str || '';
 
-    // User info from core.user_results
+    // User info from core.user_results. X moved the nested user fields from
+    // `legacy` into `core` during 2026; accept both wire shapes.
     const userResult = raw.core?.user_results?.result;
     if (userResult) {
-      tweet.username = userResult.legacy?.screen_name || '';
+      tweet.username = userResult.core?.screen_name || userResult.legacy?.screen_name || '';
       tweet.userId = userResult.rest_id || userResult.legacy?.id_str || '';
     }
+
+    // Some partial tweet responses carry the author fields directly on the
+    // tweet legacy block rather than under core.user_results.
+    tweet.username ||= legacy.screen_name || '';
+    tweet.userId ||= legacy.user_id_str || '';
 
     // Timestamp
     if (legacy.created_at) {

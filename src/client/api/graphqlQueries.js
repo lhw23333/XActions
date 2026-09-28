@@ -108,8 +108,11 @@ export const GRAPHQL_ENDPOINTS = {
   UserTweets: graphqlEndpoint('UserTweets', 'E3opETHurmVJflFsUBVuUQ', { method: 'GET' }),
   UserTweetsAndReplies: graphqlEndpoint('UserTweetsAndReplies', 'Q6aAvPw7azXZbqXzuqTALA', { method: 'GET' }),
   TweetDetail: graphqlEndpoint('TweetDetail', 'BbCrSoXIR7z93lLCVFlQ2Q', { method: 'GET' }),
-  SearchTimeline: graphqlEndpoint('SearchTimeline', 'gkjsKepM6gl_HmFWoWKfgg', { method: 'GET' }),
-  Followers: graphqlEndpoint('Followers', 'djdTXDIk2qhd4OStqlUFeQ', { method: 'GET' }),
+  // X currently serves SearchTimeline only over POST. Keeping this transport
+  // detail on the endpoint prevents the legacy Scraper client from sending a
+  // valid query ID with the wrong HTTP method and receiving a misleading 404.
+  SearchTimeline: graphqlEndpoint('SearchTimeline', 'gkjsKepM6gl_HmFWoWKfgg', { method: 'POST' }),
+  Followers: graphqlEndpoint('Followers', 'djdTXDIk2qhd4OStqlUFeQ', { method: 'POST' }),
   Following: graphqlEndpoint('Following', 'IWP6Zt14sARO29lJT35bBw', { method: 'GET' }),
   Likes: graphqlEndpoint('Likes', 'eSSNbhECHHBBew2wkHY_Bw', { method: 'GET' }),
   CreateTweet: graphqlEndpoint('CreateTweet', 'a1p9RWpkYKBjWv_I3WzS-A', { method: 'POST' }),
@@ -182,4 +185,38 @@ export function buildGraphQLUrl(endpoint, variables = {}, features) {
   params.set('features', JSON.stringify(mergedFeatures));
 
   return `${base}?${params.toString()}`;
+}
+
+/**
+ * Build the request for an endpoint using its current transport method.
+ *
+ * X has moved a small number of read operations, including SearchTimeline and
+ * Followers, from GET query parameters to POST JSON bodies. The legacy client
+ * exposes separate get/post methods, so keep the method decision in one place.
+ *
+ * @param {Object} endpoint
+ * @param {Object} [variables={}]
+ * @param {Object} [features]
+ * @returns {{method: 'GET'|'POST', url: string, body?: Object}}
+ */
+export function buildGraphQLRequest(endpoint, variables = {}, features) {
+  if (endpoint.isRest && endpoint.url) {
+    return { method: endpoint.method || 'GET', url: endpoint.url() };
+  }
+
+  if (endpoint.method !== 'POST') {
+    return { method: 'GET', url: buildGraphQLUrl(endpoint, variables, features) };
+  }
+
+  const { queryId, operationName } = endpoint;
+  const mergedVars = { ...endpoint.defaultVariables, ...variables };
+  return {
+    method: 'POST',
+    url: `https://x.com/i/api/graphql/${queryId}/${operationName}`,
+    body: {
+      queryId,
+      variables: mergedVars,
+      features: features || DEFAULT_FEATURES,
+    },
+  };
 }
