@@ -40,7 +40,7 @@ const CONFIG = {
  * @returns {Promise<object>} - Response data
  */
 async function apiRequest(endpoint, options = {}) {
-  const authToken = localStorage.getItem('authToken');
+  const authToken = isLocalDashboard() ? null : localStorage.getItem('authToken');
   
   const defaultOptions = {
     headers: {
@@ -175,10 +175,16 @@ function isAuthenticated() {
   return !!localStorage.getItem('authToken');
 }
 
+/** Local browsing is enabled only by the loopback server's runtime script. */
+function isLocalDashboard() {
+  return window.XACTIONS_LOCAL_DASHBOARD === true;
+}
+
 /**
  * Redirect to login if not authenticated
  */
 function requireAuth() {
+  if (isLocalDashboard()) return true;
   if (!isAuthenticated()) {
     window.location.href = '/login';
     return false;
@@ -241,5 +247,5 @@ function showToast(message, type = 'info') {
 
 // Export for module usage (if using modules)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { CONFIG, apiRequest, aiApiRequest, pollOperationStatus, formatNumber, formatDate, timeAgo, isAuthenticated, requireAuth, showToast };
+  module.exports = { CONFIG, apiRequest, aiApiRequest, pollOperationStatus, formatNumber, formatDate, timeAgo, isAuthenticated, isLocalDashboard, requireAuth, showToast };
 }

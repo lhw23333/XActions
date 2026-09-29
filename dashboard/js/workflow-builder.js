@@ -71,8 +71,26 @@
   function init() {
     resizeCanvas();
     buildPalette();
+    if (isLocalDashboard()) {
+      showLocalDashboard();
+    }
     bindEvents();
     render();
+  }
+
+  function showLocalDashboard() {
+    const hint = document.querySelector('.help-hint');
+    hint.setAttribute('role', 'status');
+    hint.textContent = 'Local dashboard · No X account connected. Edit workflows, export JSON, and save or load workflows in this browser. Running workflows requires a connected account.';
+    runBtn.disabled = true;
+    runBtn.title = 'Running workflows is unavailable: no X account connected';
+    runBtn.textContent = 'Run unavailable';
+  }
+
+  function localWorkflowUnavailable() {
+    if (!isLocalDashboard()) return false;
+    showToast('Running workflows is unavailable: no X account connected', 'info');
+    return true;
   }
 
   function resizeCanvas() {
@@ -446,31 +464,36 @@
   // ── Save / Load / Run ─────────────────────────────────
   async function saveWorkflow() {
     const json = toJSON();
-    try {
-      // Try saving to API first
-      await apiRequest('/workflows', {
-        method: 'POST',
-        body: JSON.stringify(json)
-      });
-      showToast('Workflow saved to server', 'success');
-    } catch {
-      // Fallback: save to localStorage
-      const saved = JSON.parse(localStorage.getItem('xactions_workflows') || '[]');
-      const idx = saved.findIndex(w => w.name === json.name);
-      if (idx >= 0) saved[idx] = json; else saved.push(json);
-      localStorage.setItem('xactions_workflows', JSON.stringify(saved));
-      showToast('Workflow saved locally', 'success');
+    if (!isLocalDashboard()) {
+      try {
+        await apiRequest('/workflows', {
+          method: 'POST',
+          body: JSON.stringify(json)
+        });
+        showToast('Workflow saved to server', 'success');
+        return;
+      } catch {
+        // Fall back to localStorage when the server is unavailable.
+      }
     }
+    const saved = JSON.parse(localStorage.getItem('xactions_workflows') || '[]');
+    const idx = saved.findIndex(w => w.name === json.name);
+    if (idx >= 0) saved[idx] = json; else saved.push(json);
+    localStorage.setItem('xactions_workflows', JSON.stringify(saved));
+    showToast('Workflow saved locally', 'success');
   }
 
   async function loadWorkflow() {
-    // Try API first
     let workflows = [];
-    try {
-      const data = await apiRequest('/workflows');
-      workflows = data.workflows || [];
-    } catch {
+    if (isLocalDashboard()) {
       workflows = JSON.parse(localStorage.getItem('xactions_workflows') || '[]');
+    } else {
+      try {
+        const data = await apiRequest('/workflows');
+        workflows = data.workflows || [];
+      } catch {
+        workflows = JSON.parse(localStorage.getItem('xactions_workflows') || '[]');
+      }
     }
 
     if (workflows.length === 0) {
@@ -490,6 +513,7 @@
   }
 
   async function runWorkflow() {
+    if (localWorkflowUnavailable()) return;
     const json = toJSON();
     if (json.blocks.length === 0) {
       showToast('Add blocks to the workflow first', 'error');

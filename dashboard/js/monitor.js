@@ -1,6 +1,8 @@
 /**
  * XActions — Real-Time Monitor JS
  * Live activity feed, Chart.js charts, account health, active automations sidebar
+ * @author nich (@nichxbt)
+ * @license Apache-2.0
  */
 
 (function () {
@@ -42,13 +44,39 @@
 
   // ── Init ───────────────────────────────────────────────
   function init() {
+    bindEvents();
+    if (isLocalDashboard()) {
+      showLocalDashboard();
+      return;
+    }
     initCharts();
     connectSocket();
     fetchAutomationStatus();
-    bindEvents();
     startResetCountdown();
     // Seed initial simulated data
     seedDemoData();
+  }
+
+  function showLocalDashboard() {
+    document.getElementById('local-dashboard-notice').hidden = false;
+    document.querySelectorAll('.chart-wrap').forEach(container => {
+      const message = document.createElement('div');
+      message.className = 'feed-empty';
+      message.textContent = 'No account connected. Monitoring data is unavailable.';
+      container.replaceChildren(message);
+    });
+    rateLimitText.textContent = 'Unavailable';
+    quotaText.textContent = 'Unavailable';
+    resetTimer.textContent = 'Unavailable';
+    feedCount.textContent = '—';
+    feed.innerHTML = '<div class="feed-empty">Live monitoring is unavailable in local browse mode.</div>';
+    automationsList.innerHTML = '<div class="feed-empty">Account actions are unavailable in local browse mode.</div>';
+  }
+
+  function monitoringUnavailable() {
+    if (!isLocalDashboard()) return false;
+    showToast('Monitoring actions are unavailable in local browse mode. No X account is connected.', 'info');
+    return true;
   }
 
   // ── Charts (Chart.js) ─────────────────────────────────
@@ -186,6 +214,7 @@
   }
 
   function clearFeed() {
+    if (monitoringUnavailable()) return;
     activityLog.length = 0;
     renderFeed();
   }
@@ -217,6 +246,7 @@
 
   // ── Active automations sidebar ────────────────────────
   async function fetchAutomationStatus() {
+    if (isLocalDashboard()) return;
     try {
       const data = await apiRequest('/automations/status');
       renderAutomations(data.automations || {});
@@ -244,6 +274,7 @@
 
   // Expose for inline onclick
   window.quickStop = async function (id) {
+    if (monitoringUnavailable()) return;
     try {
       await apiRequest(`/automations/${id}/stop`, { method: 'POST' });
       fetchAutomationStatus();
@@ -255,6 +286,7 @@
 
   // ── Socket.IO ─────────────────────────────────────────
   function connectSocket() {
+    if (isLocalDashboard()) return;
     try {
       const token = localStorage.getItem('authToken');
       socket = io(CONFIG.WS_URL, {

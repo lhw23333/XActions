@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/js/runtime-config.js"></script>
+  <script src="/js/config.js?v=local-dashboard-1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Who Unfollowed You — XActions</title>
-  <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
-  <link rel="dns-prefetch" href="//cdn.socket.io">
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true) {
+      document.write('<script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer><\/script>');
+    }
+  </script>
+  <script>
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>');
+    }
+  </script>
   <style>
     :root {
       --bg-primary: #000;
@@ -236,7 +244,7 @@
 
   <div class="app-layout">
     <aside class="sidebar-left" aria-label="Main navigation"></aside>
-    <script src="/js/sidebar.js"></script>
+    <script src="/js/sidebar.js?v=local-dashboard-1"></script>
 
     <!-- Main Content -->
     <div class="main">
@@ -362,7 +370,6 @@
     <div class="toast__message" id="toast-message"></div>
   </div>
 
-  <script src="/js/config.js"></script>
   <script>
     // ── State ──────────────────────────────────────
     const API = window.CONFIG?.API_BASE || '/api';
@@ -371,6 +378,35 @@
     let followerChart = null;
     let isScanning = false;
     let offlineWarned = false;
+
+    function localUnfollowersUnavailable() {
+      if (!isLocalDashboard()) return false;
+      showToast('Unavailable in local dashboard', 'A real connected X account is required for follower data, scans, and account actions.');
+      return true;
+    }
+
+    function showLocalUnfollowers() {
+      const notice = document.getElementById('local-dashboard-notice') || document.createElement('div');
+      notice.id = 'local-dashboard-notice';
+      notice.className = 'offline-note';
+      notice.setAttribute('role', 'status');
+      notice.innerHTML = '<div><strong>Local dashboard · No X account connected</strong><p>A real connected X account is required to collect follower data. Scans, schedules, and account actions are unavailable in local browsing mode.</p></div>';
+      if (!notice.isConnected) document.querySelector('.page-header').after(notice);
+      document.getElementById('last-scan-time').textContent = 'No account connected · No data collected';
+      document.getElementById('scan-btn').textContent = 'Scan unavailable';
+      document.querySelectorAll('.main button, .main input, .main select').forEach(control => {
+        control.disabled = true;
+        control.title = 'Unavailable: no X account connected';
+      });
+      document.querySelectorAll('.empty-state__text').forEach(el => {
+        el.textContent = 'Follower data requires a real connected account.';
+      });
+      document.getElementById('lost-count').textContent = '—';
+      document.getElementById('gained-count').textContent = '—';
+      const chartNotice = document.createElement('p');
+      chartNotice.textContent = 'Follower history is unavailable — no X account connected.';
+      document.getElementById('follower-chart').replaceWith(chartNotice);
+    }
 
     // Designed offline notice (backend migrating).
     const OFFLINE_HTML = '<div class="offline-note" role="status"><span class="offline-ic">📡</span><div><strong>Backend offline.</strong> The hosted API is being migrated. Browser scripts, the CLI, and docs work without it. <a href="/docs">Read the docs →</a></div></div>';
@@ -399,12 +435,14 @@
 
     // ── API Calls ──────────────────────────────────
     async function apiGet(path) {
+      if (isLocalDashboard()) throw new Error('Account data is unavailable in local browsing mode.');
       const res = await fetch(`${API}${path}`, { headers: authHeaders() });
       if (!res.ok) throw new Error((await res.json()).error || res.statusText);
       return res.json();
     }
 
     async function apiPost(path, body = {}) {
+      if (isLocalDashboard()) throw new Error('Account actions are unavailable in local browsing mode.');
       const res = await fetch(`${API}${path}`, {
         method: 'POST',
         headers: authHeaders(),
@@ -415,6 +453,7 @@
     }
 
     async function apiDelete(path) {
+      if (isLocalDashboard()) throw new Error('Account actions are unavailable in local browsing mode.');
       const res = await fetch(`${API}${path}`, { method: 'DELETE', headers: authHeaders() });
       if (!res.ok) throw new Error((await res.json()).error || res.statusText);
       return res.json();
@@ -586,6 +625,7 @@
 
     // ── Actions ────────────────────────────────────
     async function startScan() {
+      if (localUnfollowersUnavailable()) return;
       if (isScanning) return;
       isScanning = true;
 
@@ -619,6 +659,7 @@
     }
 
     async function updateSchedule() {
+      if (localUnfollowersUnavailable()) return;
       const interval = document.getElementById('scan-interval').value;
       const webhookUrl = document.getElementById('webhook-url').value;
       const statusEl = document.getElementById('schedule-status');
@@ -644,6 +685,7 @@
     }
 
     async function stopAutoScan() {
+      if (localUnfollowersUnavailable()) return;
       try {
         await apiDelete('/unfollowers/schedule');
         document.getElementById('scan-interval').value = '';
@@ -655,16 +697,19 @@
     }
 
     function visitProfile(username) {
+      if (localUnfollowersUnavailable()) return;
       window.open(`https://x.com/${username}`, '_blank');
     }
 
     function blockUser(username) {
+      if (localUnfollowersUnavailable()) return;
       showToast('🚫 Block', `To block @${username}, visit their profile on X.`);
       window.open(`https://x.com/${username}`, '_blank');
     }
 
     // ── Socket.IO ──────────────────────────────────
     function connectSocket() {
+      if (isLocalDashboard()) return;
       try {
         const token = getToken();
         socket = io(WS_URL, {
@@ -738,6 +783,10 @@
 
     // ── Init ───────────────────────────────────────
     async function init() {
+      if (isLocalDashboard()) {
+        showLocalUnfollowers();
+        return;
+      }
       const token = getToken();
       if (!token) {
         showToast('🔑 Login Required', 'Please log in to track unfollowers');

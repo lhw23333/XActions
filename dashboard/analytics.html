@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/js/runtime-config.js"></script>
+  <script src="/js/config.js?v=local-dashboard-1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>X/Twitter Analytics — Sentiment Analysis & Reputation Monitoring | XActions</title>
@@ -43,12 +45,16 @@
   {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://xactions.app"},{"@type":"ListItem","position":2,"name":"Analytics","item":"https://xactions.app/analytics"}]}
   </script>
 
-  <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
-  <link rel="dns-prefetch" href="//cdn.socket.io">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script>
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true) {
+      document.write('<script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer><\/script>');
+    }
+  </script>
+  <script>
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer><\/script>');
+    }
+  </script>
   <style>
     :root {
       --bg-primary: #000000;
@@ -1184,9 +1190,8 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-  <script src="/js/config.js"></script>
   <script>requireAuth();</script>
-  <script src="/js/analytics.js"></script>
-<script src="/js/sidebar.js"></script>
+  <script src="/js/analytics.js?v=local-dashboard-1"></script>
+<script src="/js/sidebar.js?v=local-dashboard-1"></script>
 </body>
 </html>

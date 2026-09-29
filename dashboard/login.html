@@ -414,9 +414,9 @@
 
       <!-- Login Card -->
       <div class="card" id="login-card" role="region" aria-labelledby="page-title">
-        <div class="error-message" id="login-error"></div>
+        <div class="error-message" id="login-error" role="alert"></div>
 
-        <button type="button" class="btn-x" id="btn-sign-in-x" onclick="signInWithX()">
+        <button type="button" class="btn-x" id="btn-sign-in-x">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
           Sign in with X
         </button>
@@ -436,7 +436,7 @@
         </form>
 
         <p class="toggle-text">
-          Don't have an account? <a href="#" onclick="showRegister(); return false;">Sign up</a>
+          Don't have an account? <a href="#" id="show-register">Sign up</a>
         </p>
 
         <div class="links">
@@ -448,10 +448,10 @@
 
       <!-- Register Card -->
       <div class="card" id="register-card" role="region" aria-label="Create account" style="display: none;">
-        <div class="error-message" id="register-error"></div>
+        <div class="error-message" id="register-error" role="alert"></div>
         <div class="success-message" id="register-success"></div>
 
-        <button type="button" class="btn-x" onclick="signInWithX()">
+        <button type="button" class="btn-x" id="btn-sign-up-x">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
           Sign up with X
         </button>
@@ -475,7 +475,7 @@
         </form>
 
         <p class="toggle-text">
-          Already have an account? <a href="#" onclick="showLogin(); return false;">Sign in</a>
+          Already have an account? <a href="#" id="show-login">Sign in</a>
         </p>
       </div>
     </div>
@@ -510,18 +510,45 @@
           missing_params: 'OAuth failed — missing parameters from X.',
           invalid_state: 'OAuth session expired. Please try again.',
           invalid_flow: 'Something went wrong. Please try again.',
+          oauth_not_configured: 'Sign in with X is not configured on this server. Contact the server administrator to enable it.',
           twitter_connection_failed: 'Could not connect to X. Please try again.'
         };
         setTimeout(() => showError(messages[error] || 'Sign in failed. Please try again.'), 100);
       }
     })();
 
-    function signInWithX() {
-      const btn = document.getElementById('btn-sign-in-x');
+    async function signInWithX(btn, isRegister = false) {
+      if (btn.disabled) return;
+      const originalContent = btn.innerHTML;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      document.getElementById(isRegister ? 'register-error' : 'login-error').classList.remove('visible');
       btn.disabled = true;
-      btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;fill:white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg> Redirecting to X...';
-      // Redirect to backend which redirects to Twitter OAuth
-      window.location.href = `${API_URL}/twitter/login`;
+      btn.textContent = 'Connecting to X...';
+      try {
+        const res = await fetch(`${API_URL}/twitter/login`, {
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const message = typeof data.error === 'string' ? data.error : data.error?.message;
+          showError(message || 'Sign in with X is temporarily unavailable. Please try again later.', isRegister);
+          return;
+        }
+        const authUrl = new URL(data.authUrl);
+        if (authUrl.protocol !== 'https:' || authUrl.hostname !== 'x.com') {
+          throw new Error('Invalid X authorization URL');
+        }
+        window.location.assign(authUrl.href);
+      } catch {
+        showError('Unable to start X sign-in. Please check your connection and try again.', isRegister);
+      } finally {
+        clearTimeout(timeout);
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+      }
     }
 
     function showLogin() {
@@ -540,7 +567,6 @@
       const el = document.getElementById(isRegister ? 'register-error' : 'login-error');
       el.textContent = message;
       el.classList.add('visible');
-      setTimeout(() => el.classList.remove('visible'), 5000);
     }
 
     function showSuccess(message) {
@@ -619,6 +645,12 @@
         btn.textContent = 'Create account';
       }
     });
+
+    // Bind events without inline handlers, which the site's CSP blocks.
+    document.getElementById('btn-sign-in-x').addEventListener('click', (event) => signInWithX(event.currentTarget));
+    document.getElementById('btn-sign-up-x').addEventListener('click', (event) => signInWithX(event.currentTarget, true));
+    document.getElementById('show-register').addEventListener('click', (event) => { event.preventDefault(); showRegister(); });
+    document.getElementById('show-login').addEventListener('click', (event) => { event.preventDefault(); showLogin(); });
 
     // Check if already logged in
     if (localStorage.getItem('authToken')) {

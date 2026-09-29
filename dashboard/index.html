@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <script src="/js/runtime-config.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - XActions | AI-Powered X/Twitter Automation Platform</title>
   <meta name="description" content="XActions Dashboard - AI-powered X/Twitter automation control center. Smart unfollow with machine learning, LLM integration, MCP server support. Manage automation with GPT & Claude compatible tools.">
@@ -30,7 +31,7 @@
   
   <!-- Socket.io for real-time browser-to-browser communication (loaded only when logged in) -->
   <script>
-    if (localStorage.getItem('authToken')) {
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true && localStorage.getItem('authToken')) {
       var s = document.createElement('script');
       s.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
       document.head.appendChild(s);
@@ -1115,7 +1116,7 @@
       outline-offset: 2px;
     }
   </style>
-  <script src="/js/config.js" defer></script>
+  <script src="/js/config.js?v=local-dashboard-1"></script>
 </head>
 <body>
   <a href="#main-content" class="skip-nav">Skip to main content</a>
@@ -1166,7 +1167,7 @@
                 <div id="connection-substatus" style="color: var(--text-secondary); font-size: 0.8125rem;">Connect your x.com browser tab to run operations</div>
               </div>
             </div>
-            <button id="connect-browser-btn" onclick="connectBrowser()" class="btn-primary" style="padding: 10px 20px; border-radius: 9999px; font-size: 0.875rem;">
+            <button id="connect-browser-btn" class="btn-primary" style="padding: 10px 20px; border-radius: 9999px; font-size: 0.875rem;">
               Connect Browser
             </button>
           </div>
@@ -1182,7 +1183,7 @@
                 <div id="operation-status" style="color: var(--text-secondary); font-size: 0.875rem;"></div>
               </div>
             </div>
-            <button onclick="stopOperation()" style="background: var(--error); color: white; border: none; padding: 8px 16px; border-radius: 9999px; cursor: pointer; font-weight: 600;">Stop</button>
+            <button id="stop-operation-btn" style="background: var(--error); color: white; border: none; padding: 8px 16px; border-radius: 9999px; cursor: pointer; font-weight: 600;">Stop</button>
           </div>
           <div style="background: var(--bg-primary); border-radius: 8px; height: 12px; overflow: hidden; margin-bottom: 12px;">
             <div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, var(--accent), var(--success)); width: 0%; transition: width 0.3s;"></div>
@@ -1197,7 +1198,7 @@
           </div>
         </div>
 
-        <div class="operation-card" role="button" tabindex="0" onclick="openOperationModal('unfollowNonFollowers')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationModal('unfollowNonFollowers')}">
+        <div class="operation-card" role="button" tabindex="0" data-operation="unfollowNonFollowers">
           <div class="operation-header">
             <span class="operation-icon" aria-hidden="true">🧹</span>
             <div class="operation-info">
@@ -1208,7 +1209,7 @@
           </div>
         </div>
 
-        <div class="operation-card" role="button" tabindex="0" onclick="openOperationModal('unfollowEveryone')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationModal('unfollowEveryone')}">
+        <div class="operation-card" role="button" tabindex="0" data-operation="unfollowEveryone">
           <div class="operation-header">
             <span class="operation-icon" aria-hidden="true">💥</span>
             <div class="operation-info">
@@ -1219,7 +1220,7 @@
           </div>
         </div>
 
-        <div class="operation-card" role="button" tabindex="0" onclick="openOperationModal('detectUnfollowers')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationModal('detectUnfollowers')}">
+        <div class="operation-card" role="button" tabindex="0" data-operation="detectUnfollowers">
           <div class="operation-header">
             <span class="operation-icon" aria-hidden="true">🔍</span>
             <div class="operation-info">
@@ -1377,7 +1378,7 @@
   <div class="modal-overlay" id="operation-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal">
       <div class="modal-header">
-        <button class="modal-close" onclick="closeModal()" aria-label="Close dialog">✕</button>
+        <button class="modal-close" data-close-operation aria-label="Close dialog">✕</button>
         <h2 class="modal-title" id="modal-title">Configure Operation</h2>
       </div>
       <div class="modal-body">
@@ -1405,8 +1406,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn-primary" style="width: auto; padding: 12px 32px;" onclick="startOperation()">Start Operation</button>
+        <button class="btn-secondary" data-close-operation>Cancel</button>
+        <button id="start-operation-btn" class="btn-primary" style="width: auto; padding: 12px 32px;">Start Operation</button>
       </div>
     </div>
   </div>
@@ -1424,8 +1425,27 @@
     let sessionId = null;
     let agentConnected = false;
 
+    function accountActionsUnavailable() {
+      if (!isLocalDashboard()) return false;
+      showToast('No X account connected. Local browsing does not run account operations.', 'info');
+      return true;
+    }
+
+    function showLocalDashboard() {
+      document.getElementById('header-subtitle').textContent = 'Local dashboard · No X account connected';
+      document.getElementById('connection-status-text').textContent = 'No X account connected';
+      document.getElementById('connection-substatus').textContent = 'Browse pages and scripts locally. Account data and operations require a real account connection.';
+      document.getElementById('connect-browser-btn').textContent = 'Account not connected';
+      document.getElementById('total-operations').textContent = 'Unavailable';
+      document.getElementById('total-unfollowed').textContent = 'Unavailable';
+      const activity = document.getElementById('recent-operations-list');
+      activity.querySelector('.empty-title').textContent = 'Account activity unavailable';
+      activity.querySelector('p').textContent = 'No account is connected in local browsing mode.';
+    }
+
     // ===== SOCKET.IO REAL-TIME CONNECTION =====
     function initSocket() {
+      if (accountActionsUnavailable()) return;
       if (!authToken) {
         showToast('Please log in first to connect your browser.', 'error');
         window.location.href = '/login';
@@ -1528,6 +1548,7 @@
     }
 
     function connectBrowser() {
+      if (accountActionsUnavailable()) return;
       if (!socket) initSocket();
       
       // Wait for session to be created
@@ -1558,21 +1579,23 @@
           </ol>
           <div style="position:relative;">
             <pre style="background:var(--bg-primary);padding:16px;border-radius:8px;overflow-x:auto;font-size:0.75rem;max-height:200px;overflow-y:auto;"><code id="agent-script-code">${window.agentScript}</code></pre>
-            <button onclick="copyAgentScript()" style="position:absolute;top:8px;right:8px;background:var(--accent);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;">Copy</button>
+            <button data-copy-agent-script style="position:absolute;top:8px;right:8px;background:var(--accent);color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600;">Copy</button>
           </div>
           <div style="margin-top:20px;display:flex;gap:12px;">
-            <button onclick="document.getElementById('agent-script-modal').remove()" style="flex:1;padding:12px;background:var(--bg-tertiary);color:var(--text-primary);border:none;border-radius:9999px;cursor:pointer;font-weight:600;">Close</button>
+            <button data-close-agent-script style="flex:1;padding:12px;background:var(--bg-tertiary);color:var(--text-primary);border:none;border-radius:9999px;cursor:pointer;font-weight:600;">Close</button>
           </div>
           <p style="margin-top:16px;text-align:center;color:var(--text-secondary);font-size:0.8125rem;">The page will update automatically when connected</p>
         </div>
       `;
       document.body.appendChild(modal);
+      modal.querySelector('[data-copy-agent-script]').addEventListener('click', copyAgentScript);
+      modal.querySelector('[data-close-agent-script]').addEventListener('click', () => modal.remove());
       modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
       });
     }
 
-    function copyAgentScript() {
+    function copyAgentScript(event) {
       navigator.clipboard.writeText(window.agentScript);
       const btn = event.target;
       btn.textContent = 'Copied!';
@@ -1629,6 +1652,7 @@
     }
 
     function stopOperation() {
+      if (accountActionsUnavailable()) return;
       if (socket) {
         socket.emit('stop:operation');
       }
@@ -1645,6 +1669,7 @@
 
     // WebSocket-based operation trigger (used when agent is connected)
     function runOperationViaSocket(operation, config) {
+      if (accountActionsUnavailable()) return;
       if (!agentConnected) {
         showToast('Please connect your browser first! Click "Connect Browser" above.', 'warning');
         return;
@@ -1653,12 +1678,16 @@
     }
 
     // Initialize socket on page load
-    if (authToken) {
+    if (authToken && !isLocalDashboard()) {
       initSocket();
     }
 
     // Load dashboard data
     async function loadDashboard() {
+      if (isLocalDashboard()) {
+        showLocalDashboard();
+        return;
+      }
       if (!authToken) {
         window.location.href = '/login';
         return;
@@ -1708,9 +1737,10 @@
                 <h2 class="connect-title">X Account Connected</h2>
               </div>
               <p class="connect-desc">@${authData.username || 'Your account'} connected via ${method}</p>
-              <button class="btn-secondary" onclick="disconnectTwitter()">Disconnect Account</button>
+              <button class="btn-secondary" data-disconnect-twitter>Disconnect Account</button>
             </div>
           `;
+          statusSection.querySelector('[data-disconnect-twitter]').addEventListener('click', disconnectTwitter);
           document.getElementById('header-subtitle').textContent = `Connected as @${authData.username || 'user'}`;
         }
 
@@ -1734,6 +1764,7 @@
     }
 
     async function loadRecentOperations() {
+      if (isLocalDashboard()) return;
       try {
         const res = await fetch(`${API_URL}/operations?limit=5`, {
           headers: { 'Authorization': `Bearer ${authToken}` }
@@ -1786,6 +1817,7 @@
     }
 
     async function connectTwitterOAuth() {
+      if (accountActionsUnavailable()) return;
       try {
         const res = await fetch(`${API_URL}/twitter/connect`, {
           headers: { 'Authorization': `Bearer ${authToken}` }
@@ -1798,6 +1830,7 @@
     }
 
     async function saveSessionCookie() {
+      if (accountActionsUnavailable()) return;
       const sessionCookie = document.getElementById('session-cookie-input').value.trim();
       const username = document.getElementById('twitter-username-input').value.trim();
 
@@ -1830,6 +1863,7 @@
     }
 
     async function disconnectTwitter() {
+      if (accountActionsUnavailable()) return;
       if (!confirm('Are you sure you want to disconnect your X account?')) return;
       
       try {
@@ -1848,6 +1882,7 @@
     }
 
     function openOperationModal(type) {
+      if (accountActionsUnavailable()) return;
       currentOperation = type;
       document.getElementById('modal-title').textContent = `Configure ${formatOperationType(type)}`;
       document.getElementById('operation-modal').classList.add('active');
@@ -1860,6 +1895,7 @@
     }
 
     async function startOperation() {
+      if (accountActionsUnavailable()) return;
       const maxUnfollows = document.getElementById('max-unfollows').value;
       const dryRun = document.getElementById('dry-run').checked;
 
@@ -1903,6 +1939,21 @@
     }
 
     // Close modal on escape key
+    document.getElementById('connect-browser-btn').addEventListener('click', connectBrowser);
+    document.getElementById('stop-operation-btn').addEventListener('click', stopOperation);
+    document.getElementById('start-operation-btn').addEventListener('click', startOperation);
+    document.querySelectorAll('[data-close-operation]').forEach(button => button.addEventListener('click', closeModal));
+    document.querySelectorAll('[data-operation]').forEach(card => {
+      const open = () => openOperationModal(card.dataset.operation);
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open();
+        }
+      });
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeModal();
     });
@@ -1952,7 +2003,7 @@
 
     // Load on page load
     loadDashboard();
-    setInterval(loadRecentOperations, 10000);
+    if (!isLocalDashboard()) setInterval(loadRecentOperations, 10000);
 
     // Socket already initialized above — no duplicate call
   </script>
@@ -1998,7 +2049,7 @@
       <p>© 2024-2026 XActions. Apache 2.0 License. No API fees. No limits.</p>
     </div>
   </footer>
-<script src="/js/sidebar.js"></script>
+<script src="/js/sidebar.js?v=local-dashboard-1"></script>
 </body>
 </html>
 

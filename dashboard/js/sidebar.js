@@ -1,9 +1,21 @@
 // XActions Shared Sidebar — X/Twitter-style navigation
 // by nichxbt
 
-(function () {
+(async function () {
   const sidebar = document.querySelector('.sidebar-left');
   if (!sidebar) return;
+
+  // Static pages may not load the runtime script in their head. Its absence
+  // keeps the ordinary signed-out behavior; only the local server enables it.
+  if (typeof window.XACTIONS_LOCAL_DASHBOARD !== 'boolean') {
+    await new Promise(resolve => {
+      const runtime = document.createElement('script');
+      runtime.src = '/js/runtime-config.js';
+      runtime.onload = runtime.onerror = resolve;
+      document.head.appendChild(runtime);
+    });
+  }
+  const localDashboard = window.XACTIONS_LOCAL_DASHBOARD === true;
 
   const path = window.location.pathname.replace(/\.html$/, '').replace(/\/+$/, '') || '/';
 
@@ -101,6 +113,11 @@
   const nav = navItems.map(item => {
     const active = isActive(item.href) ? ' active' : '';
     const ext = item.external ? ' target="_blank" rel="noopener noreferrer"' : '';
+    if (localDashboard && item.href === '/admin') {
+      return `<a href="/admin" class="nav-item" aria-disabled="true" data-local-admin title="System administrator access is unavailable in local browsing mode">
+        <span class="nav-icon" aria-hidden="true">${item.icon}</span><span>Admin · unavailable</span>
+      </a>`;
+    }
     return `<a href="${item.href}" class="nav-item${active}" aria-label="${item.label}"${ext}>
       <span class="nav-icon" aria-hidden="true">${item.icon}</span>
       <span>${item.label}</span>
@@ -128,6 +145,12 @@
 
   // Populate user info from stored auth token
   (function loadUserInfo() {
+    if (localDashboard) {
+      document.getElementById('user-menu-link').href = '/dashboard';
+      document.getElementById('user-display-name').textContent = 'Local dashboard';
+      document.getElementById('user-handle').textContent = 'No X account connected';
+      return;
+    }
     const token = localStorage.getItem('authToken');
     if (!token) {
       // Not logged in — show GitHub link
@@ -181,6 +204,28 @@
       })
       .catch(() => { /* non-critical, keep JWT-decoded display */ });
   }());
+
+  if (localDashboard) {
+    const showLocalNotice = () => {
+      if (document.getElementById('local-dashboard-notice')) return;
+      const main = document.querySelector('main') || document.querySelector('.main-content');
+      if (!main) return;
+      const notice = document.createElement('div');
+      notice.id = 'local-dashboard-notice';
+      notice.setAttribute('role', 'status');
+      notice.style.cssText = 'margin:16px;padding:14px 18px;border:1px solid var(--border,#2f3336);border-radius:12px;color:var(--text-secondary,#71767b);';
+      notice.textContent = 'Local dashboard · No X account connected. Browse pages and scripts; account data and operations require a real connection.';
+      main.prepend(notice);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showLocalNotice, { once: true });
+    else showLocalNotice();
+    sidebar.querySelector('[data-local-admin]')?.addEventListener('click', event => {
+      event.preventDefault();
+      showLocalNotice();
+      const notice = document.getElementById('local-dashboard-notice');
+      if (notice) notice.textContent = 'System administrator access is unavailable in local browsing mode. No administrator account is signed in.';
+    });
+  }
 
   // Inject sidebar CSS overrides (wins cascade over inline <style> blocks)
   const style = document.createElement('style');

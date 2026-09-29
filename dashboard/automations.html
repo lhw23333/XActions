@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="/js/runtime-config.js"></script>
+  <script src="/js/config.js?v=local-dashboard-1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>X/Twitter Automations — Schedule & Run Scripts Automatically | XActions</title>
@@ -43,9 +45,11 @@
   {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://xactions.app"},{"@type":"ListItem","position":2,"name":"Automations","item":"https://xactions.app/automations"}]}
   </script>
 
-  <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
-  <link rel="dns-prefetch" href="//cdn.socket.io">
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
+  <script>
+    if (window.XACTIONS_LOCAL_DASHBOARD !== true) {
+      document.write('<script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer><\/script>');
+    }
+  </script>
   <style>
     :root {
       --bg-primary: #000;
@@ -332,7 +336,7 @@
   <a href="#main-content" class="skip-nav">Skip to main content</a>
   <div class="layout">
     <aside class="sidebar-left" aria-label="Main navigation"></aside>
-    <script src="/js/sidebar.js"></script>
+    <script src="/js/sidebar.js?v=local-dashboard-1"></script>
 
     <!-- Main -->
     <main class="main" id="main-content" style="flex:1;margin:0;padding:20px;max-width:none;">
@@ -382,8 +386,7 @@
 
   </div><!-- /.layout -->
 
-  <script src="/js/config.js"></script>
   <script>requireAuth();</script>
-  <script src="/js/automations.js"></script>
+  <script src="/js/automations.js?v=local-dashboard-1"></script>
 </body>
 </html>

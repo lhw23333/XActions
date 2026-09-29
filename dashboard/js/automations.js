@@ -36,13 +36,41 @@
 
   // ── Init ───────────────────────────────────────────────
   async function init() {
+    if (isLocalDashboard()) {
+      showLocalDashboard();
+      return;
+    }
     await fetchStatus();
     connectSocket();
     bindGlobalEvents();
   }
 
+  function showLocalDashboard() {
+    const notice = document.getElementById('local-dashboard-notice') || document.createElement('div');
+    notice.id = 'local-dashboard-notice';
+    notice.setAttribute('role', 'status');
+    notice.style.cssText = 'padding:16px;margin-bottom:20px;border:1px solid var(--border);border-radius:12px;';
+    notice.innerHTML = '<strong>Local dashboard · No X account connected</strong><p>Automation status and controls are unavailable without a real account. No automations have been loaded or started.</p>';
+    if (!notice.isConnected) grid.before(notice);
+    grid.innerHTML = '<p style="grid-column:1/-1;color:var(--text-secondary);">Account data is unavailable in local browsing mode.</p>';
+    runningCount.textContent = '—';
+    totalActions.textContent = '—';
+    document.getElementById('conn-status').textContent = 'Not connected';
+    emergencyBtn.disabled = true;
+    emergencyBtn.textContent = 'Controls unavailable';
+    emergencyBtn.title = 'No X account connected';
+    modalSave.disabled = true;
+  }
+
+  function localAutomationUnavailable() {
+    if (!isLocalDashboard()) return false;
+    showToast('Unavailable: no X account connected', 'info');
+    return true;
+  }
+
   // ── Fetch current status from API ──────────────────────
   async function fetchStatus() {
+    if (isLocalDashboard()) return;
     try {
       const data = await apiRequest('/automations/status');
       automations = data.automations || {};
@@ -121,6 +149,7 @@
 
   // ── Toggle (start / stop) ─────────────────────────────
   async function toggleAutomation(id) {
+    if (localAutomationUnavailable()) return;
     const auto = automations[id];
     if (!auto) return;
 
@@ -138,6 +167,7 @@
 
   // ── Emergency stop ────────────────────────────────────
   async function emergencyStop() {
+    if (localAutomationUnavailable()) return;
     try {
       await apiRequest('/automations/stop-all', { method: 'POST' });
       await fetchStatus();
@@ -194,6 +224,7 @@
   }
 
   async function saveSettings() {
+    if (localAutomationUnavailable()) return;
     if (!currentEditId) return;
     const form = modalBody;
     const settings = {};
@@ -263,6 +294,7 @@
 
   // ── Socket.IO ─────────────────────────────────────────
   function connectSocket() {
+    if (isLocalDashboard()) return;
     try {
       const token = localStorage.getItem('authToken');
       socket = io(CONFIG.WS_URL, {

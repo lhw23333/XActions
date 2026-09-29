@@ -37,6 +37,7 @@
     "xactions-agent": "./src/agents/thoughtLeaderAgent.js"
   },
   "scripts": {
+    "dashboard:local": "node scripts/local-dashboard.mjs",
     "desktop:dev": "npm --prefix desktop run dev",
     "desktop:build": "npm --prefix desktop run build",
     "desktop:start": "npm --prefix desktop run start",

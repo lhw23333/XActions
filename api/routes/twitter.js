@@ -1,18 +1,48 @@
 // Copyright (c) 2024-2026 nich (@nichxbt). Licensed under the Apache License, Version 2.0.
+// @author nich (@nichxbt)
 import express from 'express';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import crypto from 'crypto';
-import { requireJwtSecret } from '../utils/secrets.js';
+import { hasJwtSecret, requireJwtSecret } from '../utils/secrets.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Twitter OAuth 2.0 configuration
-const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID;
-const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET;
+// Read configuration when handling requests, after the entry point has loaded .env.
+function getOAuthConfig() {
+  return {
+    clientId: (process.env.TWITTER_CLIENT_ID || '').trim(),
+    clientSecret: (process.env.TWITTER_CLIENT_SECRET || '').trim(),
+  };
+}
+
+function isOAuthConfigured() {
+  const { clientId, clientSecret } = getOAuthConfig();
+  return Boolean(
+    clientId && clientId !== 'your_twitter_client_id' &&
+    clientSecret && clientSecret !== 'your_twitter_client_secret' &&
+    hasJwtSecret()
+  );
+}
+
+function wantsJson(req) {
+  return req.accepts(['html', 'json']) === 'json';
+}
+
+function requireOAuthConfig(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  if (isOAuthConfigured()) return next();
+  if (req.path === '/login' && !wantsJson(req)) {
+    return res.redirect('/login?error=oauth_not_configured');
+  }
+  return res.status(503).json({
+    error: 'Sign in with X is not configured on this server. Contact the server administrator to enable it.',
+    code: 'OAUTH_NOT_CONFIGURED',
+  });
+}
 
 // Derive base URL — works on Vercel (VERCEL_URL), Railway (API_URL), or localhost
 function getBaseUrl() {
@@ -23,8 +53,7 @@ function getBaseUrl() {
 
 function getFrontendUrl() {
   if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.trim().replace(/\/$/, '');
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.trim()}`;
-  return 'http://localhost:3000';
+  return getBaseUrl();
 }
 
 // Stateless OAuth state — encode data as a signed JWT used as the `state` param.
@@ -43,10 +72,11 @@ function parseOAuthState(state) {
 
 // Build Twitter OAuth URL
 function buildOAuthUrl(state, codeChallenge) {
+  const { clientId } = getOAuthConfig();
   const callbackUrl = `${getBaseUrl()}/api/twitter/callback`;
   const authUrl = new URL('https://x.com/i/oauth2/authorize');
   authUrl.searchParams.append('response_type', 'code');
-  authUrl.searchParams.append('client_id', TWITTER_CLIENT_ID);
+  authUrl.searchParams.append('client_id', clientId);
   authUrl.searchParams.append('redirect_uri', callbackUrl);
   authUrl.searchParams.append('scope', 'tweet.read users.read follows.read follows.write offline.access');
   authUrl.searchParams.append('state', state);
@@ -57,19 +87,20 @@ function buildOAuthUrl(state, codeChallenge) {
 
 // Exchange OAuth code for Twitter tokens and user info
 async function exchangeCodeForUser(code, codeVerifier) {
+  const { clientId, clientSecret } = getOAuthConfig();
   const callbackUrl = `${getBaseUrl()}/api/twitter/callback`;
   const tokenResponse = await axios.post(
     'https://api.x.com/2/oauth2/token',
     new URLSearchParams({
       code,
       grant_type: 'authorization_code',
-      client_id: TWITTER_CLIENT_ID,
+      client_id: clientId,
       redirect_uri: callbackUrl,
       code_verifier: codeVerifier
     }),
     {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      auth: { username: TWITTER_CLIENT_ID, password: TWITTER_CLIENT_SECRET }
+      auth: { username: clientId, password: clientSecret }
     }
   );
 
@@ -97,7 +128,7 @@ router.get('/status', authMiddleware, async (req, res) => {
       connected: Boolean(active?.username),
       username: active?.username || null,
       savedSessions: Array.isArray(sessions) ? sessions.map((s) => s.username || s).filter(Boolean) : [],
-      oauthConfigured: Boolean(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET),
+      oauthConfigured: isOAuthConfigured(),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -105,16 +136,18 @@ router.get('/status', authMiddleware, async (req, res) => {
 });
 
 // Sign in with X — no auth required, redirects to Twitter OAuth
-router.get('/login', (req, res) => {
+router.get('/login', requireOAuthConfig, (req, res) => {
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
   const state = createOAuthState({ codeVerifier, flow: 'login' });
 
-  res.redirect(buildOAuthUrl(state, codeChallenge));
+  const authUrl = buildOAuthUrl(state, codeChallenge);
+  if (wantsJson(req)) return res.json({ authUrl });
+  res.redirect(authUrl);
 });
 
 // Connect X to existing account — requires auth
-router.get('/connect', authMiddleware, (req, res) => {
+router.get('/connect', authMiddleware, requireOAuthConfig, (req, res) => {
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
   const state = createOAuthState({ codeVerifier, flow: 'connect', userId: req.user.id });
@@ -234,20 +267,21 @@ router.post('/disconnect', authMiddleware, async (req, res) => {
 // Refresh Twitter token
 async function refreshTwitterToken(user) {
   try {
+    const { clientId, clientSecret } = getOAuthConfig();
     const response = await axios.post(
       'https://api.x.com/2/oauth2/token',
       new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: user.twitterRefreshToken,
-        client_id: TWITTER_CLIENT_ID
+        client_id: clientId
       }),
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         },
         auth: {
-          username: TWITTER_CLIENT_ID,
-          password: TWITTER_CLIENT_SECRET
+          username: clientId,
+          password: clientSecret
         }
       }
     );

@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
+import { isLocalDashboardEnabled, localDashboardGuard } from './utils/local-dashboard.js';
 
 dotenv.config();
 
@@ -119,6 +120,7 @@ const PORT = process.env.PORT || 3001;
  */
 export function createApp({ rateLimiting = true } = {}) {
   const app = express();
+  app.use(localDashboardGuard);
   const httpServer = createServer(app);
 
   // Initialize Socket.io for real-time browser-to-browser communication
@@ -247,6 +249,18 @@ export function createApp({ rateLimiting = true } = {}) {
     res.json({ status: 'ok', service: 'xactions-api', timestamp: new Date().toISOString() });
   });
 
+  // This flag only controls UI browsing. It grants no account or API privileges.
+  app.get('/js/runtime-config.js', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.type('application/javascript').send(`window.XACTIONS_LOCAL_DASHBOARD = ${isLocalDashboardEnabled()};\n`);
+  });
+
+  app.get(['/login', '/login.html'], (req, res, next) => {
+    if (!isLocalDashboardEnabled()) return next();
+    res.set('Cache-Control', 'no-store');
+    res.redirect('/dashboard');
+  });
+
   // SEO files - robots.txt, sitemap.xml, manifest.json
   app.get('/robots.txt', (req, res) => {
     res.type('text/plain').sendFile(path.join(__dirname, '../public/robots.txt'));
@@ -302,6 +316,10 @@ export function createApp({ rateLimiting = true } = {}) {
     etag: true,          // Enable ETag for conditional requests
     lastModified: true,
     setHeaders: (res, filePath) => {
+      if (isLocalDashboardEnabled() && /\.(?:html|js|css)$/.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return;
+      }
       // Long cache for immutable assets (if any)
       if (filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.svg') || filePath.endsWith('.ico') || filePath.endsWith('.woff2')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -583,11 +601,18 @@ function mountPluginRoutes(app) {
  */
 export function start() {
   const { app, httpServer, io } = createApp();
+  const localDashboard = isLocalDashboardEnabled();
   // Use httpServer instead of app.listen for Socket.io support
-  httpServer.listen(PORT, async () => {
+  httpServer.listen(localDashboard ? { port: PORT, host: '127.0.0.1' } : { port: PORT }, async () => {
     console.log(`🚀 XActions API Server running on port ${PORT}`);
     console.log(`🔌 WebSocket server ready for real-time connections`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+
+    if (localDashboard) {
+      console.log(`🏠 Local dashboard: http://127.0.0.1:${PORT}/ — no registration, no X account connected`);
+      // Browsing does not need plugins, telemetry, or the database scan scheduler.
+      return;
+    }
   
     // Initialize plugin system and mount plugin routes
     try {

@@ -18,6 +18,32 @@ let lastTimelineData = null;
 let lastMentionsData = null;
 let compareMode = false;
 
+function localAnalyticsUnavailable() {
+  if (!isLocalDashboard()) return false;
+  showToast('Unavailable in local dashboard', 'No X account connected. Analytics and monitoring require a real account.', 'info');
+  return true;
+}
+
+function showLocalAnalytics() {
+  const notice = document.getElementById('local-dashboard-notice') || document.createElement('div');
+  notice.id = 'local-dashboard-notice';
+  notice.className = 'card';
+  notice.setAttribute('role', 'status');
+  notice.innerHTML = '<strong>Local dashboard · No X account connected</strong><p>Browse the analytics layout and tabs. Account data, analysis, monitoring, and alerts are unavailable until a real account is connected.</p>';
+  if (!notice.isConnected) document.querySelector('.page-header').after(notice);
+  document.querySelectorAll('.tab-content input, .tab-content textarea, .tab-content select, .tab-content button').forEach(control => {
+    control.disabled = true;
+    control.title = 'Unavailable: no X account connected';
+  });
+  document.querySelectorAll('.empty-state-text').forEach(el => {
+    el.textContent = 'Unavailable — no X account connected';
+  });
+  document.querySelectorAll('.empty-state p').forEach(el => {
+    el.textContent = 'Connect a real account outside local browsing mode to collect data.';
+  });
+  document.getElementById('analyzeBtnText').textContent = 'Analysis unavailable';
+}
+
 // ============================================================================
 // Toast Notification System
 // ============================================================================
@@ -51,6 +77,12 @@ function showToast(title, message, type = 'info', duration = 4000) {
 // ============================================================================
 
 document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      tab.click();
+    }
+  });
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => {
       t.classList.remove('active');
@@ -62,6 +94,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
 
     // Load data when switching tabs
+    if (isLocalDashboard()) return;
     if (tab.dataset.tab === 'monitors') loadMonitors();
     if (tab.dataset.tab === 'alerts') loadAlerts();
     if (tab.dataset.tab === 'timeline') refreshMonitorSelect();
@@ -126,6 +159,7 @@ function renderComparisonPanel(panelEl, result, label) {
 // ============================================================================
 
 async function analyzeSentiment() {
+  if (localAnalyticsUnavailable()) return;
   const mode = document.getElementById('sentimentMode').value;
   const btn = document.getElementById('analyzeBtn');
   const btnText = document.getElementById('analyzeBtnText');
@@ -403,6 +437,7 @@ function exportResults(format) {
 }
 
 function exportTimeline(format) {
+  if (localAnalyticsUnavailable()) return;
   if (!lastTimelineData || lastTimelineData.length === 0) {
     showToast('Nothing to export', 'Load a timeline first', 'warning');
     return;
@@ -450,6 +485,7 @@ function downloadFile(filename, content, mimeType) {
 // ============================================================================
 
 async function startMonitor() {
+  if (localAnalyticsUnavailable()) return;
   const target = document.getElementById('monitorTarget').value.trim();
   const type = document.getElementById('monitorType').value;
   const interval = parseInt(document.getElementById('monitorInterval').value) || 900;
@@ -489,6 +525,7 @@ async function startMonitor() {
 }
 
 async function loadMonitors() {
+  if (localAnalyticsUnavailable()) return;
   try {
     const res = await fetch(API_BASE + '/monitor');
     const data = await res.json();
@@ -528,6 +565,7 @@ async function loadMonitors() {
 }
 
 async function deleteMonitor(id) {
+  if (localAnalyticsUnavailable()) return;
   try {
     await fetch(API_BASE + '/monitor/' + id, { method: 'DELETE' });
     loadMonitors();
@@ -546,6 +584,7 @@ const stopMonitor = deleteMonitor;
 // ============================================================================
 
 async function refreshMonitorSelect() {
+  if (isLocalDashboard()) return;
   try {
     const res = await fetch(API_BASE + '/monitor');
     const data = await res.json();
@@ -564,6 +603,7 @@ async function refreshMonitorSelect() {
 }
 
 async function loadTimeline() {
+  if (localAnalyticsUnavailable()) return;
   const monitorId = document.getElementById('timelineMonitor').value;
   const period = document.getElementById('timelinePeriod').value;
 
@@ -766,6 +806,7 @@ function renderTimelineStats(history) {
 // ============================================================================
 
 function toggleAutoRefresh() {
+  if (localAnalyticsUnavailable()) return;
   const toggle = document.getElementById('autoRefreshToggle');
   const isActive = toggle.classList.toggle('active');
 
@@ -787,6 +828,7 @@ function toggleAutoRefresh() {
 // ============================================================================
 
 async function loadAlerts() {
+  if (localAnalyticsUnavailable()) return;
   try {
     const severity = document.getElementById('alertSeverityFilter')?.value || '';
     const url = severity
@@ -830,6 +872,7 @@ async function loadAlerts() {
 // ============================================================================
 
 function initSocket() {
+  if (isLocalDashboard()) return;
   try {
     if (typeof io === 'undefined') {
       console.log('Socket.IO not loaded — real-time updates disabled');
@@ -861,6 +904,7 @@ function initSocket() {
 }
 
 function requestNotifications() {
+  if (isLocalDashboard()) return;
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
@@ -931,6 +975,10 @@ document.addEventListener('keydown', (e) => {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (isLocalDashboard()) {
+    showLocalAnalytics();
+    return;
+  }
   initSocket();
   requestNotifications();
 });

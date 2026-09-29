@@ -2,6 +2,19 @@
 
 The static web dashboard: plain HTML, CSS, and JavaScript, no build step. Pages cover automations, analytics, scraping, AI tools, billing, and admin.
 
+Browse the dashboard locally without registering or authorizing an X account:
+
+    npm run dashboard:local   # http://127.0.0.1:3001
+
+This launcher binds only to `127.0.0.1` and skips startup telemetry and the
+database scan scheduler. Login URLs open the dashboard directly. Account data
+is shown as unavailable until an authenticated service is configured; no user,
+session token, or example activity is created. Account API endpoints retain
+their authentication checks. X operations still need a connected account, and
+database-backed features still need their normal backend configuration.
+Use the normal API launcher below to return to account login. The local
+launcher refuses to run with `NODE_ENV=production`.
+
 Serve it with the API (recommended, the pages call `/api/*`):
 
     node api/server.js      # http://localhost:3001
