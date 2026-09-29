@@ -37,6 +37,10 @@
     "xactions-agent": "./src/agents/thoughtLeaderAgent.js"
   },
   "scripts": {
+    "desktop:dev": "npm --prefix desktop run dev",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:start": "npm --prefix desktop run start",
+    "desktop:check": "npm --prefix desktop run typecheck && npm --prefix desktop test",
     "vercel-build": "prisma generate",
     "dev": "nodemon scripts/dev-server.mjs",
     "start": "node scripts/start-server.mjs",

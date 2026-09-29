@@ -1,0 +1,12 @@
+# Copyright (c) 2024-2026 nich (@nichxbt). Apache-2.0. @author nich (@nichxbt)
+node_modules/
+dist/
+dist-electron/
+logs/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
